@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบวิเคราะห์และจำลองการแบ่งกลุ่มลูกค้า E-Commerce (Product & Customer Clusters)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts: Prompt & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Prompt', 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
+        }
+        .tab-active {
+            background-color: #4f46e5;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }
+        .tab-inactive {
+            background-color: #ffffff;
+            color: #475569;
+        }
+        .tab-inactive:hover {
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 999px;
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.35s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-500 p-2.5 rounded-xl shadow-inner">
+                        <i class="fa-solid fa-users-viewfinder text-2xl text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight">E-Commerce Customer & Product Segmentation</h1>
+                        <p class="text-xs text-indigo-200">วิเคราะห์ข้อมูล 1 ธ.ค. 2010 – 9 ธ.ค. 2011 • Product Clusters (0–4) & Customer Clusters (0–10)</p>
+                    </div>
+                </div>
+
+                <!-- 3 Interactive Tabs -->
+                <nav class="flex flex-wrap gap-2 bg-slate-800/70 p-1.5 rounded-xl border border-slate-700/60">
+                    <button onclick="switchTab('overview')" id="btn-overview" class="tab-active px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>ภาพรวมข้อมูลและกลุ่มสินค้า/ลูกค้า</span>
+                    </button>
+                    <button onclick="switchTab('models')" id="btn-models" class="tab-inactive px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group"></i>
+                        <span>เปรียบเทียบโมเดลและ Ensemble</span>
+                    </button>
+                    <button onclick="switchTab('simulator')" id="btn-simulator" class="tab-inactive px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>จำลองการทำนายลูกค้าใหม่</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- ========================================================= -->
+        <!-- TAB 1: ภาพรวมข้อมูลและกลุ่มสินค้า/ลูกค้า (OVERVIEW & CLUSTERS) -->
+        <!-- ========================================================= -->
+        <section id="tab-overview" class="animate-fade-in space-y-6">
+
+            <!-- Header Banner -->
+            <div class="glass-card rounded-2xl p-6 border-l-4 border-indigo-600 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <span class="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold mb-2">
+                        ช่วงข้อมูล: 1 ธันวาคม 2010 – 9 ธันวาคม 2011 (~1 ปี)
+                    </span>
+                    <h2 class="text-2xl font-bold text-slate-800">ภาพรวมธุรกรรม E-Commerce และการแบ่งกลุ่มสินค้า (5 กลุ่ม) & ลูกค้า (11 กลุ่ม)</h2>
+                    <p class="text-slate-600 text-sm mt-1">
+                        หลังทำความสะอาดข้อมูล: ลบแถวที่ไม่มี CustomerID จำนวน 135,080 แถว (ทำให้ Hong Kong หายไป เหลือ 37 ประเทศ), พบออเดอร์ยกเลิก 3,654 ใบ และระบุตัวตนลูกค้าได้คิดเป็นยอดขาย 83.54%
+                    </p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-200 px-4 py-3 rounded-xl text-left lg:text-right shrink-0">
+                    <div class="text-xs text-indigo-700 font-medium">ยอดขายรวมที่ระบุตัวตนลูกค้าได้</div>
+                    <div class="text-xl font-bold text-indigo-950">£8,911,407.90</div>
+                    <div class="text-[11px] text-slate-600">83.54% ของยอดขายที่ตรวจสอบได้</div>
+                </div>
+            </div>
+
+            <!-- Key Metrics Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div class="glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">จำนวนออเดอร์ทั้งหมด (Unique Orders)</p>
+                            <h3 class="text-3xl font-bold text-slate-800 mt-2">18,536 <span class="text-sm font-normal text-slate-500">ออเดอร์</span></h3>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-receipt"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-rose-600 mt-3 font-medium">
+                        <i class="fa-solid fa-ban mr-1"></i>พบออเดอร์ยกเลิก 3,654 ใบ • ตัดออก 135,080 แถวที่ไม่มี CustomerID
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">จำนวนลูกค้าทั้งหมด (Customers)</p>
+                            <h3 class="text-3xl font-bold text-slate-800 mt-2">4,347 <span class="text-sm font-normal text-slate-500">ราย</span></h3>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-emerald-700 mt-3 font-medium">
+                        <i class="fa-solid fa-globe mr-1"></i>37 ประเทศ (Hong Kong ถูกตัดออกเนื่องจากไม่มี CustomerID)
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">สหราชอาณาจักร (UK)</p>
+                            <h3 class="text-3xl font-bold text-indigo-600 mt-2">89.82% <span class="text-sm font-normal text-slate-500">ออเดอร์</span></h3>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-flag-usa"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-3">
+                        16,649 ออเดอร์ • ยอดขาย <strong>82.01%</strong> (£7,308,391.55) • AOV ~<strong>£438.97</strong>
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500">ตลาดต่างประเทศ (36 ประเทศ)</p>
+                            <h3 class="text-3xl font-bold text-amber-600 mt-2">17.99% <span class="text-sm font-normal text-slate-500">ยอดขาย</span></h3>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-earth-asia"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-3">
+                        สัดส่วนออเดอร์ <strong>10.18%</strong> (1,887 ออเดอร์) • ยอดขาย <strong>£1,603,016.35</strong> (ล็อตใหญ่ / B2B)
+                    </p>
+                </div>
+            </div>
+
+            <!-- Single-Order vs Repeat-Order & Order Amount Distribution -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Single vs Repeat Order -->
+                <div class="lg:col-span-6 glass-card rounded-2xl p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800 mb-1">ลูกค้าซื้อครั้งเดียว vs ลูกค้าซื้อซ้ำ (Single vs. Repeat Order)</h3>
+                        <p class="text-xs text-slate-500 mb-4">รายได้หลักของธุรกิจมาจากลูกค้าที่กลับมาซื้อซ้ำ (2 ออเดอร์ขึ้นไป) ถึงกว่า 93%</p>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div class="p-4 rounded-xl bg-rose-50/70 border border-rose-200">
+                                <div class="text-xs font-bold text-rose-700">ซื้อครั้งเดียว (1 ออเดอร์)</div>
+                                <div class="text-xl font-bold text-slate-800 mt-1">£616,311.73</div>
+                                <div class="text-xs font-semibold text-rose-600 mt-0.5">คิดเป็น 6.92% ของยอดขายรวม</div>
+                                <p class="text-[11px] text-slate-600 mt-2">จำนวนคนสัดส่วนสูงแต่ยอดรวมต่ำ ควรกระตุ้นให้เกิดการซื้อครั้งที่ 2 ด้วยคูปองหรือสินค้าจับคู่</p>
+                            </div>
+                            <div class="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200">
+                                <div class="text-xs font-bold text-emerald-700">ซื้อซ้ำ (2 ออเดอร์ขึ้นไป)</div>
+                                <div class="text-xl font-bold text-slate-800 mt-1">£8,295,096.17</div>
+                                <div class="text-xs font-semibold text-emerald-700 mt-0.5">คิดเป็น 93.08% ของยอดขายรวม</div>
+                                <p class="text-[11px] text-slate-600 mt-2">เป็นฐานรายได้หลักของธุรกิจ สร้างความผูกพันและรักษาลูกค้าประจำระยะยาว</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-48 w-full">
+                        <canvas id="repeatOrderChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Order Amount Distribution Insight -->
+                <div class="lg:col-span-6 glass-card rounded-2xl p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800 mb-1">สัดส่วนมูลค่าคำสั่งซื้อ (Distribution of Order Amounts)</h3>
+                        <p class="text-xs text-slate-500 mb-4">ยอดสั่งซื้อส่วนใหญ่ (65%) เกิน £200 และมีบิลใหญ่หลักพันถึงหมื่นจากผู้ซื้อแบบเหมา / ค้าส่ง (B2B/Reseller)</p>
+
+                        <div class="space-y-2.5 text-xs mb-4">
+                            <div class="p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 flex justify-between items-center">
+                                <span class="font-semibold text-indigo-950">บิลเกิน £200 (รวม 65%: 200–500 £ 44%, 500–1,000 £ 15%, 1,000–5,000 £ 6%, 5,000–50,000 £)</span>
+                                <span class="px-2 py-0.5 bg-indigo-200 text-indigo-900 rounded font-bold shrink-0 ml-2">65%</span>
+                            </div>
+                            <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-100 flex justify-between items-center">
+                                <span class="font-semibold text-amber-950">ช่วง £100–£200 (22%): ทำโปรโมชันกระตุ้นยอดซื้อให้ถึง £200</span>
+                                <span class="px-2 py-0.5 bg-amber-200 text-amber-900 rounded font-bold shrink-0 ml-2">22%</span>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-100 border border-slate-200 flex justify-between items-center">
+                                <span class="font-semibold text-slate-800">ต่ำกว่า £100 (12%: 50–100 £ 6% และ 0–50 £ 6%): จัดเซต Bundle หรือสินค้าเสริมเพิ่มชิ้นต่อบิล</span>
+                                <span class="px-2 py-0.5 bg-slate-300 text-slate-900 rounded font-bold shrink-0 ml-2">12%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative h-48 w-full">
+                        <canvas id="orderAmountChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 1: PRODUCT CLUSTERS (0-4) -->
+            <div class="glass-card rounded-2xl p-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">1. Product Cluster (K-Means บน Description 193 คำ • Silhouette Score • 5 กลุ่ม)</span>
+                        <h3 class="text-xl font-bold text-slate-800 mt-0.5">รายชื่อและคำอธิบายกลุ่มสินค้าทั้ง 5 กลุ่ม (Product Cluster 0 – 4)</h3>
+                    </div>
+                    <span class="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold">ใช้คำนวณสัดส่วน categ_0 ถึง categ_4 ของลูกค้าแต่ละราย</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div class="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 flex flex-col justify-between">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded bg-indigo-600 text-white text-[11px] font-bold mb-2">Product Cluster 0</span>
+                            <h4 class="font-bold text-slate-900 text-sm">กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป</h4>
+                            <p class="text-xs text-slate-600 mt-1.5">สินค้าตกแต่งบ้าน งานฝีมือ ดีไซน์วินเทจ ของแต่งบ้านทั่วไป</p>
+                        </div>
+                        <div class="mt-3 pt-2 border-t border-indigo-200/70 text-[11px] font-semibold text-indigo-800">
+                            ฟีเจอร์ลูกค้า: categ_0
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-sky-50/60 border border-sky-200 flex flex-col justify-between">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded bg-sky-600 text-white text-[11px] font-bold mb-2">Product Cluster 1</span>
+                            <h4 class="font-bold text-slate-900 text-sm">กลุ่มของตกแต่งชิ้นเล็กและของใช้เบ็ดเตล็ด</h4>
+                            <p class="text-xs text-slate-600 mt-1.5">ของตกแต่งชิ้นเล็ก ของใช้เบ็ดเตล็ด ของกระจุกกระจิกในชีวิตประจำวัน</p>
+                        </div>
+                        <div class="mt-3 pt-2 border-t border-sky-200/70 text-[11px] font-semibold text-sky-800">
+                            ฟีเจอร์ลูกค้า: categ_1
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-rose-50/60 border border-rose-200 flex flex-col justify-between">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-bold mb-2">Product Cluster 2</span>
+                            <h4 class="font-bold text-slate-900 text-sm">กลุ่มของขวัญและเทศกาล</h4>
+                            <p class="text-xs text-slate-600 mt-1.5">สินค้าเทศกาล ของขวัญ ของที่ระลึก และอุปกรณ์ห่อของขวัญ</p>
+                        </div>
+                        <div class="mt-3 pt-2 border-t border-rose-200/70 text-[11px] font-semibold text-rose-800">
+                            ฟีเจอร์ลูกค้า: categ_2
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-amber-50/60 border border-amber-200 flex flex-col justify-between">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold mb-2">Product Cluster 3</span>
+                            <h4 class="font-bold text-slate-900 text-sm">กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ</h4>
+                            <p class="text-xs text-slate-600 mt-1.5">กระเป๋า กล่องใส่ของ กล่องอาหาร และอุปกรณ์จัดเก็บต่างๆ</p>
+                        </div>
+                        <div class="mt-3 pt-2 border-t border-amber-200/70 text-[11px] font-semibold text-amber-800">
+                            ฟีเจอร์ลูกค้า: categ_3
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-purple-50/60 border border-purple-200 flex flex-col justify-between">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded bg-purple-600 text-white text-[11px] font-bold mb-2">Product Cluster 4</span>
+                            <h4 class="font-bold text-slate-900 text-sm">กลุ่มเครื่องประดับและของมีค่า</h4>
+                            <p class="text-xs text-slate-600 mt-1.5">เครื่องประดับ ของมีค่า และสินค้าแฟชั่นชิ้นโดดเด่น</p>
+                        </div>
+                        <div class="mt-3 pt-2 border-t border-purple-200/70 text-[11px] font-semibold text-purple-800">
+                            ฟีเจอร์ลูกค้า: categ_4
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: CUSTOMER CLUSTERS (0-10) TABLE & REFERENCE -->
+            <div class="glass-card rounded-2xl p-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-700">2. Customer Cluster (K-Means บนพฤติกรรมการซื้อและสัดส่วน Product Cluster • 11 กลุ่ม)</span>
+                        <h3 class="text-xl font-bold text-slate-800 mt-0.5">ตารางอ้างอิงกลุ่มลูกค้าทั้ง 11 กลุ่ม (Customer Cluster 0 – 10)</h3>
+                    </div>
+                    <span class="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-semibold">ใช้เป็น Label ฝึกโมเดลทำนายลูกค้าใหม่ตั้งแต่การซื้อครั้งแรก</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                                <th class="py-3 px-3 font-bold">รหัสกลุ่ม</th>
+                                <th class="py-3 px-3 font-bold">ชื่อกลุ่มลูกค้า (Exact Customer Cluster Name)</th>
+                                <th class="py-3 px-3 font-bold">ลักษณะพฤติกรรม</th>
+                                <th class="py-3 px-3 font-bold">ความสนใจ / Product Cluster ที่เด่น</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customer-cluster-table-body" class="divide-y divide-slate-100">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION 3: REGIONAL & COUNTRY INSIGHTS -->
+            <div class="glass-card rounded-2xl p-6">
+                <h3 class="text-xl font-bold text-slate-800 mb-1">เจาะลึกตลาดรายประเทศและภูมิภาค (Regional & Country Insights)</h3>
+                <p class="text-xs text-slate-500 mb-4">เปรียบเทียบตลาดหลัก (UK) ตลาดยุโรป และโอกาสการขยายตลาดในเอเชียและอเมริกา</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                        <div class="font-bold text-slate-900 text-sm mb-1">🇬🇧 สหราชอาณาจักร (UK) & ยุโรปหลัก</div>
+                        <p class="text-slate-600 leading-relaxed">
+                            <strong>UK:</strong> 89.82% ของออเดอร์ (16,649 บิล) และ 82.01% ของยอดขาย (£7,308,391.55) AOV ~£438.97<br>
+                            <strong>Germany & France:</strong> ฐานลูกค้ากว้าง สั่งบ่อยคล้าย UK (457 และ 389 ออเดอร์ ยอดต่อบิล ~£500–£537)<br>
+                            <strong>Netherlands & Australia:</strong> ลูกค้ารายใหญ่ยอดต่อบิลสูงมาก (£3,004.70 และ £2,430.20 จากประเทศละ 9 ราย)
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200">
+                        <div class="font-bold text-indigo-950 text-sm mb-1">🇮🇪 ไอร์แลนด์ (EIRE) & ฝั่งเอเชีย (Asia)</div>
+                        <p class="text-slate-700 leading-relaxed">
+                            <strong>EIRE:</strong> อันดับ 2 ต่างประเทศ (£265,545.90 จาก 260 ออเดอร์) แต่มาจากลูกค้าเพียง 3 ราย (Key Account ต้องดูแลเป็นพิเศษ)<br>
+                            <strong>Asia (7 ประเทศ):</strong> ยอดขาย £70,207.83 (0.79%) จาก 38 ออเดอร์ / 18 ราย (เฉลี่ย ~£1,847.57/บิล) นำโดย <strong>Japan</strong> (£37,416.37) และ <strong>Singapore</strong> (£21,279.29 จาก 1 ราย ยอดต่อบิล ~£3,039.89) สินค้าเด่น: <em>Product Cluster 0</em> & <em>Product Cluster 2</em>
+                        </p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
+                        <div class="font-bold text-amber-950 text-sm mb-1">🌎 ฝั่งอเมริกา (Canada & USA)</div>
+                        <p class="text-slate-700 leading-relaxed">
+                            <strong>Canada:</strong> ยอดขาย £3,666.38 (>80% มาจาก CustomerID: 17444 ที่สั่งซ้ำ 3 ครั้ง) สินค้าเด่นกลุ่มกระเป๋า/กล่องและของใช้ (<em>Product Cluster 3</em>)<br>
+                            <strong>USA:</strong> ยอดขาย £3,580.39 กระจุกตัวช่วง Q4 (ต.ค.–ธ.ค. 2011) ลูกค้ารายใหญ่ CustomerID: 12607 (£1,579.51) และ 12646 (£1,346.97) เด่นกลุ่มของขวัญ/เทศกาล (<em>Product Cluster 2</em>)
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TAB 2: เปรียบเทียบโมเดลและ ENSEMBLE (MODELS & ENSEMBLE)       -->
+        <!-- ========================================================= -->
+        <section id="tab-models" class="hidden animate-fade-in space-y-6">
+            <div class="glass-card rounded-2xl p-6 border-l-4 border-indigo-600">
+                <span class="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold mb-2">
+                    ทดลองทั้งหมด 7 โมเดล • แบ่งข้อมูล 80% Train (10 เดือน) / 20% Test (2 เดือน)
+                </span>
+                <h2 class="text-2xl font-bold text-slate-800">เปรียบเทียบโมเดลทำนายกลุ่มลูกค้าใหม่และ Ensemble (90.03%)</h2>
+                <p class="text-slate-600 text-sm mt-1">
+                    ใช้ผลการจัดกลุ่ม Customer Cluster (0–10) จาก K-Means เป็น Label ฝึกโมเดล Classification เพื่อทำนายว่าลูกค้าใหม่ที่เข้ามาซื้อตั้งแต่ครั้งแรกควรอยู่กลุ่มใด โดยเมื่อรวม 3 โมเดลเข้าด้วยกัน ความแม่นยำเพิ่มเป็น <strong>90.03%</strong>
+                </p>
+            </div>
+
+            <!-- Chart & Summary -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-7 glass-card rounded-2xl p-6">
+                    <h3 class="text-lg font-bold text-slate-800 mb-1">กราฟเปรียบเทียบความแม่นยำบนชุดทดสอบ 20% (Test Accuracy %)</h3>
+                    <p class="text-xs text-slate-500 mb-4">เปรียบเทียบ KNN (79.78%), Gradient Boosting (89.47%), Random Forest (89.61%) และ Ensemble Combined (90.03%)</p>
+                    <div class="relative h-72 w-full">
+                        <canvas id="accuracyComparisonChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-5 glass-card rounded-2xl p-6 flex flex-col justify-between space-y-3">
+                    <h3 class="text-lg font-bold text-slate-800">สรุปความแม่นยำของโมเดลหลัก</h3>
+
+                    <div class="p-3.5 rounded-xl bg-purple-50 border-2 border-purple-400">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-purple-950 text-sm">🏆 Ensemble Combined Model (RF + GB + KNN)</span>
+                            <span class="px-2.5 py-0.5 rounded bg-purple-700 text-white text-xs font-bold">90.03%</span>
+                        </div>
+                        <p class="text-xs text-slate-700 mt-1">ผสานการทำงานร่วมกันของทั้ง 3 โมเดล ให้ความแม่นยำสูงสุดเหนือโมเดลเดี่ยวทุกตัว</p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-emerald-900 text-sm">Random Forest</span>
+                            <span class="px-2.5 py-0.5 rounded bg-emerald-200 text-emerald-950 text-xs font-bold">89.61%</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mt-1">รวมหลาย Decision Tree เข้าด้วยกันเพื่อทำนายรวมและลดความผันผวน (Variance)</p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-indigo-900 text-sm">Gradient Boosting Classifier</span>
+                            <span class="px-2.5 py-0.5 rounded bg-indigo-200 text-indigo-950 text-xs font-bold">89.47%</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mt-1">สร้าง Decision Tree ต่อเนื่องเป็นลำดับเพื่อปรับปรุงผลลัพธ์จากรอบก่อนหน้า</p>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-amber-900 text-sm">K-Nearest Neighbors (KNN)</span>
+                            <span class="px-2.5 py-0.5 rounded bg-amber-200 text-amber-950 text-xs font-bold">79.78%</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mt-1">วัดความใกล้เคียง/ระยะห่างของข้อมูลลูกค้าใหม่กับกลุ่มลูกค้าในฐานข้อมูล</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Explanations in Thai -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div class="glass-card rounded-2xl p-5 border-t-4 border-amber-500">
+                    <h4 class="font-bold text-slate-800 text-base">K-Nearest Neighbors (79.78%)</h4>
+                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                        <strong>หลักการทำงาน:</strong> พิจารณาว่าข้อมูลการซื้อของลูกค้าใหม่มีความใกล้เคียง (Similarity / Distance) กับลูกค้าตัวอย่างกลุ่มใดมากที่สุดในพื้นที่คุณลักษณะ
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 border-t-4 border-emerald-500">
+                    <h4 class="font-bold text-slate-800 text-base">Random Forest (89.61%)</h4>
+                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                        <strong>หลักการทำงาน:</strong> ใช้ Decision Tree หลายต้นที่เทรนบนข้อมูลย่อยและฟีเจอร์ที่แตกต่างกัน แล้วนำผลทำนายมารวมกันเพื่อลดความผันผวนและป้องกันการจำข้อมูลเกินจริง
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 border-t-4 border-indigo-600">
+                    <h4 class="font-bold text-slate-800 text-base">Gradient Boosting (89.47%)</h4>
+                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                        <strong>หลักการทำงาน:</strong> สร้าง Decision Tree ต่อเนื่องกันเป็นลำดับ โดยแต่ละต้นจะเรียนรู้และลดข้อผิดพลาดที่เหลืออยู่จากการทำนายของต้นก่อนหน้า
+                    </p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 border-t-4 border-purple-600">
+                    <h4 class="font-bold text-slate-800 text-base">Ensemble Combined (90.03%)</h4>
+                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">
+                        <strong>ทำไมรวมกันแล้วดีขึ้น:</strong> การผสานขอบเขตการแบ่งกลุ่มแบบต้นไม้ (RF & GB) เข้ากับมุมมองความใกล้เคียงของเพื่อนบ้าน (KNN) ช่วยลดจุดบอดของแต่ละโมเดลและเพิ่มความแม่นยำเป็น <strong>90.03%</strong>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TAB 3: จำลองการทำนายลูกค้าใหม่ตั้งแต่การซื้อครั้งแรก (SIMULATOR) -->
+        <!-- ========================================================= -->
+        <section id="tab-simulator" class="hidden animate-fade-in space-y-6">
+            <div class="glass-card rounded-2xl p-6 border-l-4 border-purple-600 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">จำลองการทำนายกลุ่มลูกค้าใหม่ตั้งแต่การซื้อครั้งแรก</h2>
+                    <p class="text-slate-600 text-sm mt-1">
+                        ทดลองปรับค่าการสั่งซื้อครั้งแรกของลูกค้า เพื่อดูผลทำนายจาก Random Forest (89.61%), Gradient Boosting (89.47%), KNN (79.78%) และ Ensemble (90.03%)
+                    </p>
+                </div>
+
+                <!-- Quick Presets -->
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="applyPreset('bulk_b2b')" class="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-lg text-xs font-semibold transition">
+                        ลูกค้าส่ง / ธุรกิจขนาดใหญ่ (กลุ่ม 10)
+                    </button>
+                    <button onclick="applyPreset('super_vip')" class="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold transition">
+                        ซูปเปอร์วีไอพี / สายเปย์ (กลุ่ม 9)
+                    </button>
+                    <button onclick="applyPreset('gift_festive')" class="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-900 rounded-lg text-xs font-semibold transition">
+                        นักช็อปเทศกาลและของขวัญ (กลุ่ม 2)
+                    </button>
+                    <button onclick="applyPreset('first_small')" class="px-3 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-900 rounded-lg text-xs font-semibold transition">
+                        ลูกค้าขาจร (กลุ่ม 5)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left Column: First Purchase Controls -->
+                <div class="lg:col-span-5 glass-card rounded-2xl p-6 space-y-5">
+                    <h3 class="text-lg font-bold text-slate-800 border-b border-slate-200 pb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-cart-shopping text-indigo-600"></i>
+                        <span>ข้อมูลการสั่งซื้อครั้งแรก (First Purchase)</span>
+                    </h3>
+
+                    <!-- Order Amount (£) -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <label class="font-medium text-slate-700">มูลค่าคำสั่งซื้อ (£ GBP)</label>
+                            <span id="sim-amount-val" class="font-bold text-indigo-600">£420</span>
+                        </div>
+                        <input type="range" id="sim-amount" min="10" max="5000" step="10" value="420" oninput="updateSimulator()">
+                        <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+                            <span>£10 (&lt;£100)</span>
+                            <span>£200</span>
+                            <span>£2,500</span>
+                            <span>£5,000 (Bulk)</span>
+                        </div>
+                    </div>
+
+                    <!-- Quantity / Items -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <label class="font-medium text-slate-700">จำนวนชิ้นสินค้า (Quantity)</label>
+                            <span id="sim-qty-val" class="font-bold text-indigo-600">48 ชิ้น</span>
+                        </div>
+                        <input type="range" id="sim-qty" min="1" max="600" step="1" value="48" oninput="updateSimulator()">
+                        <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+                            <span>1 ชิ้น</span>
+                            <span>150 ชิ้น</span>
+                            <span>300 ชิ้น</span>
+                            <span>600 ชิ้น</span>
+                        </div>
+                    </div>
+
+                    <!-- Product Variety -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <label class="font-medium text-slate-700">ความหลากหลายของสินค้า (Product Variety)</label>
+                            <span id="sim-variety-val" class="font-bold text-indigo-600">12 รายการ</span>
+                        </div>
+                        <input type="range" id="sim-variety" min="1" max="50" step="1" value="12" oninput="updateSimulator()">
+                        <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+                            <span>1 รายการ</span>
+                            <span>15 รายการ</span>
+                            <span>30 รายการ</span>
+                            <span>50 รายการ</span>
+                        </div>
+                    </div>
+
+                    <!-- Dominant Product Cluster (0-4) -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">กลุ่มสินค้าหลักที่ซื้อ (Dominant Product Cluster)</label>
+                        <select id="sim-prod-cluster" onchange="updateSimulator()" class="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none">
+                            <option value="0">Product Cluster 0: กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป</option>
+                            <option value="1">Product Cluster 1: กลุ่มของตกแต่งชิ้นเล็กและของใช้เบ็ดเตล็ด</option>
+                            <option value="2" selected>Product Cluster 2: กลุ่มของขวัญและเทศกาล</option>
+                            <option value="3">Product Cluster 3: กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ</option>
+                            <option value="4">Product Cluster 4: กลุ่มเครื่องประดับและของมีค่า</option>
+                        </select>
+                    </div>
+
+                    <!-- Region / Country -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1.5">ภูมิภาค / ประเทศ (Region / Country)</label>
+                        <select id="sim-region" onchange="updateSimulator()" class="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none">
+                            <option value="UK" selected>สหราชอาณาจักร (UK - ตลาดในประเทศ)</option>
+                            <option value="EU_RETAIL">ยุโรปฐานกว้าง (Germany / France)</option>
+                            <option value="EU_WHOLESALE">ยุโรป/โอเชียเนียรายใหญ่ (Netherlands / Australia / EIRE)</option>
+                            <option value="ASIA">เอเชีย (Japan / Singapore / UAE / อื่นๆ)</option>
+                            <option value="AMERICA">อเมริกา (Canada / USA)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Column: Model Outputs & Ensemble Consensus -->
+                <div class="lg:col-span-7 space-y-5">
+
+                    <!-- 3 Individual Model Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="glass-card rounded-2xl p-4 border-t-4 border-emerald-500">
+                            <div class="flex justify-between items-center text-xs font-bold text-emerald-700 mb-1">
+                                <span>Random Forest</span>
+                                <span>89.61% Acc</span>
+                            </div>
+                            <div id="pred-rf-name" class="text-sm font-bold text-slate-900">-</div>
+                            <div id="pred-rf-conf" class="text-xs text-slate-500 mt-1.5">-</div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-4 border-t-4 border-indigo-600">
+                            <div class="flex justify-between items-center text-xs font-bold text-indigo-700 mb-1">
+                                <span>Gradient Boosting</span>
+                                <span>89.47% Acc</span>
+                            </div>
+                            <div id="pred-gb-name" class="text-sm font-bold text-slate-900">-</div>
+                            <div id="pred-gb-conf" class="text-xs text-slate-500 mt-1.5">-</div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-4 border-t-4 border-amber-500">
+                            <div class="flex justify-between items-center text-xs font-bold text-amber-700 mb-1">
+                                <span>K-Nearest Neighbors</span>
+                                <span>79.78% Acc</span>
+                            </div>
+                            <div id="pred-knn-name" class="text-sm font-bold text-slate-900">-</div>
+                            <div id="pred-knn-conf" class="text-xs text-slate-500 mt-1.5">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Combined Ensemble Result Card -->
+                    <div class="glass-card rounded-2xl p-6 border-l-8 border-purple-600">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-purple-700">
+                                🏆 ผลทำนายรวมจาก Ensemble Combined Model (Benchmark: 90.03%)
+                            </span>
+                            <span id="sim-vote-badge" class="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-bold">
+                                -
+                            </span>
+                        </div>
+
+                        <h3 id="sim-final-cluster" class="text-xl sm:text-2xl font-bold text-slate-900">-</h3>
+                        <p id="sim-final-desc" class="text-sm text-slate-600 mt-2 leading-relaxed">-</p>
+
+                        <div class="mt-3 text-xs text-slate-700 bg-indigo-50/70 border border-indigo-100 rounded-xl p-3">
+                            <strong>ความเชื่อมโยงกับกลุ่มสินค้า:</strong> <span id="sim-prod-link">-</span>
+                        </div>
+
+                        <!-- Marketing & Retention Recommendations -->
+                        <div class="mt-4 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <h4 class="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                <i class="fa-solid fa-bullhorn text-indigo-600"></i>
+                                <span>ข้อเสนอแนะด้านการตลาดและการรักษาลูกค้า (Marketing & Retention Actions)</span>
+                            </h4>
+                            <ul id="sim-actions" class="space-y-1.5 text-xs sm:text-sm text-slate-700 list-disc pl-5">
+                                <!-- Populated by JS -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-5 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
+            <div>ระบบวิเคราะห์และจำลองการแบ่งกลุ่มลูกค้า E-Commerce (1 ธ.ค. 2010 – 9 ธ.ค. 2011)</div>
+            <div>Random Forest (89.61%) • Gradient Boosting (89.47%) • KNN (79.78%) • Ensemble (90.03%)</div>
+        </div>
+    </footer>
+
+    <script>
+        // =========================================================
+        // EXACT CLUSTER DEFINITIONS (SINGLE SOURCE OF TRUTH)
+        // =========================================================
+        const PRODUCT_CLUSTERS = {
+            0: { id: 0, name: 'กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป', label: 'Product Cluster 0: กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป' },
+            1: { id: 1, name: 'กลุ่มของตกแต่งชิ้นเล็กและของใช้เบ็ดเตล็ด', label: 'Product Cluster 1: กลุ่มของตกแต่งชิ้นเล็กและของใช้เบ็ดเตล็ด' },
+            2: { id: 2, name: 'กลุ่มของขวัญและเทศกาล', label: 'Product Cluster 2: กลุ่มของขวัญและเทศกาล' },
+            3: { id: 3, name: 'กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ', label: 'Product Cluster 3: กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ' },
+            4: { id: 4, name: 'กลุ่มเครื่องประดับและของมีค่า', label: 'Product Cluster 4: กลุ่มเครื่องประดับและของมีค่า' }
+        };
+
+        const CUSTOMER_CLUSTERS = {
+            0: {
+                id: 0,
+                name: 'กลุ่มนักช้อปสายของแต่งบ้านทั่วไป',
+                fullName: 'Customer Cluster 0: กลุ่มนักช้อปสายของแต่งบ้านทั่วไป',
+                behavior: 'มียอดใช้จ่ายปานกลางถึงค่อนข้างสูง เน้นซื้อของแต่งบ้านและงานฝีมือ',
+                affinity: 'เด่น Product Cluster 0: กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป',
+                desc: 'ลูกค้าที่ให้ความสำคัญกับการตกแต่งบ้านและงานฝีมือทั่วไป มีแนวโน้มซื้อสินค้าตกแต่งบ้านและจับคู่กับของใช้เบ็ดเตล็ด',
+                actions: [
+                    'แนะนำสินค้าตกแต่งบ้านและงานฝีมือ (Product Cluster 0: กลุ่มของตกแต่งบ้านและงานฝีมือทั่วไป) ที่เข้าชุดกัน',
+                    'มอบคูปองกระตุ้นการซื้อครั้งที่ 2 เพื่อเพิ่มยอดสั่งซื้อให้ผ่านเกณฑ์ £200'
+                ]
+            },
+            1: {
+                id: 1,
+                name: 'กลุ่มสายแฟชั่นและเครื่องประดับย่อย',
+                fullName: 'Customer Cluster 1: กลุ่มสายแฟชั่นและเครื่องประดับย่อย',
+                behavior: 'จำนวนคนปานกลาง ยอดใช้จ่ายกลางๆ ค่อนไปทางต่ำ เน้นของกระจุกกระจิกหรือเครื่องประดับชิ้นเล็กๆ',
+                affinity: 'เชื่อมโยงกับ Product Cluster 1 และ Product Cluster 4',
+                desc: 'ลูกค้าที่สนใจแฟชั่นและเครื่องประดับชิ้นเล็กหรือของใช้เบ็ดเตล็ด มียอดใช้จ่ายระดับกลางไปทางต่ำ',
+                actions: [
+                    'จัดเซต Bundle สินค้าชิ้นเล็กกับเครื่องประดับย่อยเพื่อเพิ่มจำนวนชิ้นต่อบิล (โดยเฉพาะบิล < £100 และ £100–£200)',
+                    'ส่งโปรโมชันกระตุ้นการซื้อซ้ำครั้งที่ 2 พร้อมสินค้ามาใหม่ในหมวดที่สนใจ'
+                ]
+            },
+            2: {
+                id: 2,
+                name: 'กลุ่มนักช้อปตามเทศกาลและของขวัญ',
+                fullName: 'Customer Cluster 2: กลุ่มนักช้อปตามเทศกาลและของขวัญ',
+                behavior: 'ซื้อสินค้าเป็นช่วงๆ ตามเทศกาลสำคัญ เน้นของขวัญ ของที่ระลึก และอุปกรณ์ห่อของขวัญ',
+                affinity: 'เด่น Product Cluster 2: กลุ่มของขวัญและเทศกาล',
+                desc: 'ลูกค้าที่ซื้อสินค้าตามฤดูกาล เทศกาลสำคัญ และโอกาสพิเศษ มักเลือกสินค้าของขวัญ ของที่ระลึก และอุปกรณ์ห่อของขวัญ',
+                actions: [
+                    'ส่งแคมเปญล่วงหน้าก่อนเทศกาลสำคัญพร้อมชุดของขวัญและอุปกรณ์ห่อของขวัญ (Product Cluster 2: กลุ่มของขวัญและเทศกาล)',
+                    'มอบส่วนลดสำหรับการสั่งซื้อครั้งถัดไปเพื่อเปลี่ยนนักช้อปตามเทศกาลให้เป็นลูกค้าประจำ'
+                ]
+            },
+            3: {
+                id: 3,
+                name: 'กลุ่มคนรักกระเป๋าและอุปกรณ์จัดเก็บ',
+                fullName: 'Customer Cluster 3: กลุ่มคนรักกระเป๋าและอุปกรณ์จัดเก็บ',
+                behavior: 'ซื้อสินค้าประเภทนี้อย่างชัดเจน โดดเด่นกว่ากลุ่มอื่น',
+                affinity: 'เด่น Product Cluster 3: กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ',
+                desc: 'ลูกค้าที่นิยมกระเป๋า กล่อง และอุปกรณ์จัดเก็บอย่างชัดเจน มีความต้องการสินค้าจัดระเบียบและกระเป๋าใช้งาน',
+                actions: [
+                    'แนะนำกระเป๋า กล่อง และอุปกรณ์จัดเก็บรุ่นใหม่หรือไซซ์ที่เข้าชุดกัน (Product Cluster 3: กลุ่มประเภทกระเป๋า กล่องและอุปกรณ์จัดเก็บ)',
+                    'จัดโปรโมชันซื้อคู่เพิ่มยอดบิลให้แตะระดับ £200 ขึ้นไป'
+                ]
+            },
+            4: {
+                id: 4,
+                name: 'กลุ่มสาวกเครื่องประดับและของหรูหรา',
+                fullName: 'Customer Cluster 4: กลุ่มสาวกเครื่องประดับและของหรูหรา',
+                behavior: 'ชื่นชอบการซื้อสินค้าแฟชั่น เครื่องประดับ และของมีค่าหรูหรา',
+                affinity: 'เด่น Product Cluster 4: กลุ่มเครื่องประดับและของมีค่า',
+                desc: 'ลูกค้าที่ชื่นชอบสินค้าแฟชั่น เครื่องประดับ และของมีค่า มีความใส่ใจในภาพลักษณ์และคุณค่าของสินค้า',
+                actions: [
+                    'นำเสนอคอลเลกชันพิเศษและสินค้าเครื่องประดับ/ของมีค่า (Product Cluster 4: กลุ่มเครื่องประดับและของมีค่า)',
+                    'สร้างโปรแกรมสะสมสิทธิ์และดูแลลูกค้าอย่างต่อเนื่องเพื่อกระตุ้นการซื้อซ้ำ'
+                ]
+            },
+            5: {
+                id: 5,
+                name: 'กลุ่มลูกค้าขาจร / ซื้อของทั่วไปคละหมวด',
+                fullName: 'Customer Cluster 5: กลุ่มลูกค้าขาจร / ซื้อของทั่วไปคละหมวด',
+                behavior: 'มียอดสะสมและจำนวนครั้งอยู่ในระดับมาตรฐานทั่วไป ไม่มีหมวดหมู่ใดสนใจเป็นพิเศษ ซื้อคละตามความต้องการ',
+                affinity: 'ซื้อคละหลายกลุ่มสินค้า (Product Cluster 0–4)',
+                desc: 'ลูกค้าที่ซื้อสินค้าทั่วไปคละหมวดตามความต้องการหรือเพิ่งเริ่มต้นทดลองซื้อ มียอดและจำนวนครั้งระดับมาตรฐานทั่วไป',
+                actions: [
+                    'กระตุ้นให้เกิดการซื้อครั้งที่ 2 ด้วยคูปองส่วนลดสำหรับออเดอร์ถัดไป (เนื่องจากลูกค้าซื้อครั้งเดียวคิดเป็น 6.92% ของยอดขาย)',
+                    'จัดเซต Bundle หรือแนะนำสินค้าขายดีสำหรับบิล < £100 และ £100–£200 เพื่อเพิ่มยอดต่อบิล'
+                ]
+            },
+            6: {
+                id: 6,
+                name: 'กลุ่มลูกค้ารายย่อยขาประจำ',
+                fullName: 'Customer Cluster 6: กลุ่มลูกค้ารายย่อยขาประจำ',
+                behavior: 'มีความถี่ในการกลับมาซื้อบ่อยครั้ง ยอดใช้จ่ายในบิลไม่สูงมาก เน้นสินค้าหลากหลายตามความจำเป็นในชีวิตประจำวัน',
+                affinity: 'ซื้อสม่ำเสมอในหลายหมวดสินค้าประจำวัน',
+                desc: 'ลูกค้าที่กลับมาซื้อซ้ำบ่อยครั้งในระดับรายย่อย เน้นความสะดวกและสินค้าที่ใช้ในชีวิตประจำวัน',
+                actions: [
+                    'ทำแคมเปญเติมสต็อกและจัดเซต Bundle เพิ่มปริมาณต่อบิลเพื่อยกระดับยอดใช้จ่ายต่อครั้ง',
+                    'มอบสิทธิประโยชน์สมาชิกประจำเพื่อรักษาความถี่ในการซื้อซ้ำ'
+                ]
+            },
+            7: {
+                id: 7,
+                name: 'กลุ่มนักช้อปกระเป๋าหนัก',
+                fullName: 'Customer Cluster 7: กลุ่มนักช้อปกระเป๋าหนัก',
+                behavior: 'นานๆ จะแวะเข้ามาซื้อ ซื้อทีละหลายๆ ชิ้นในคราวเดียว ยอดซื้อต่อบิลสูงมากเป็นพิเศษ เน้นสินค้าคุณภาพสูง',
+                affinity: 'ยอดต่อบิลสูง • เน้นคุณภาพสูง',
+                desc: 'ลูกค้าที่อาจไม่ถี่ทุกสัปดาห์ แต่เมื่อซื้อแต่ละครั้งจะสั่งปริมาณมากและมียอดต่อบิลสูงมากเป็นพิเศษ',
+                actions: [
+                    'นำเสนอสินค้าพรีเมียมและแพ็กเกจสั่งซื้อหลายชิ้นที่มีมูลค่าสูง',
+                    'ติดตามดูแลหลังการขายและส่งข้อเสนอพิเศษช่วงเทศกาลหรือสินค้าล็อตใหม่เพื่อเพิ่มความถี่'
+                ]
+            },
+            8: {
+                id: 8,
+                name: 'กลุ่มลูกค้าประจำยอดสะสมสูง',
+                fullName: 'Customer Cluster 8: กลุ่มลูกค้าประจำยอดสะสมสูง',
+                behavior: 'มีความสม่ำเสมอในการซื้อ มียอดใช้จ่ายสะสมรวมในระดับสูงมาก เน้นบริการที่ดีและสินค้าตอบโจทย์ระยะยาว',
+                affinity: 'ยอดสะสมสูงมาก • ซื้อสม่ำเสมอ',
+                desc: 'ลูกค้าประจำที่มีความสม่ำเสมอและมียอดใช้จ่ายสะสมรวมสูงมาก ให้ความสำคัญกับบริการและสินค้าที่ตอบโจทย์ระยะยาว',
+                actions: [
+                    'มอบสิทธิ์ดูแลระดับ Priority / Key Account และบริการจัดส่งที่รวดเร็วเชื่อถือได้',
+                    'แนะนำสินค้าหมวดใหม่ที่สอดคล้องกับประวัติการซื้อระยะยาว'
+                ]
+            },
+            9: {
+                id: 9,
+                name: 'กลุ่มซูปเปอร์วีไอพี / ขาประจำสายเปย์',
+                fullName: 'Customer Cluster 9: กลุ่มซูปเปอร์วีไอพี / ขาประจำสายเปย์',
+                behavior: 'มีความถี่ในการซื้อสูง ยอดใช้จ่ายสะสมรวมในระดับสูงมาก สนใจสินค้าพรีเมียมหลากหลายประเภท',
+                affinity: 'ความถี่สูง + ยอดสะสมสูงมาก',
+                desc: 'กลุ่มลูกค้าชั้นนำที่ทั้งซื้อบ่อยและมียอดใช้จ่ายสะสมรวมสูงมาก สนใจสินค้าพรีเมียมหลากหลายประเภท',
+                actions: [
+                    'จัดโปรแกรม VIP Exclusive พร้อมสิทธิ์เข้าถึงสินค้าใหม่และโปรโมชันพิเศษก่อนใคร',
+                    'มอบผู้ดูแลเฉพาะ (Key Account Care) เพื่อรักษาความผูกพันระยะยาว'
+                ]
+            },
+            10: {
+                id: 10,
+                name: 'กลุ่มลูกค้าส่ง / ธุรกิจขนาดใหญ่',
+                fullName: 'Customer Cluster 10: กลุ่มลูกค้าส่ง / ธุรกิจขนาดใหญ่',
+                behavior: 'สั่งซื้อสินค้าในปริมาณมากแบบ Bulk Order มียอดซื้อรวมสูงถึงหลักหมื่น เน้นสินค้าราคาส่งเพื่อนำไปจำหน่ายต่อ',
+                affinity: 'Bulk / B2B / Reseller ยอดสูง',
+                desc: 'ผู้ซื้อเชิงธุรกิจหรือตัวแทนจำหน่าย (B2B / Reseller / Bulk Order) ที่สั่งซื้อปริมาณมากและมียอดสูง',
+                actions: [
+                    'เสนอโครงสร้างราคาส่ง (Wholesale Tiered Pricing) และเงื่อนไขการสั่งซื้อล็อตใหญ่ / การจัดส่งแบบ B2B',
+                    'มอบหมายทีมดูแลลูกค้าองค์กร/ตัวแทนจำหน่ายโดยเฉพาะ (โดยเฉพาะตลาดต่างประเทศและ Key Accounts)'
+                ]
+            }
+        };
+
+        // =========================================================
+        // TAB SWITCHING
+        // =========================================================
+        function switchTab(tabId) {
+            ['overview', 'models', 'simulator'].forEach(id => {
+                const section = document.getElementById(`tab-${id}`);
+                const btn = document.getElementById(`btn-${id}`);
+                if (id === tabId) {
+                    section.classList.remove('hidden');
+                    btn.classList.remove('tab-inactive');
+                    btn.classList.add('tab-active');
+                } else {
+                    section.classList.add('hidden');
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('tab-inactive');
+                }
+            });
+            if (tabId === 'simulator') {
+                updateSimulator();
+            }
+        }
+
+        // =========================================================
+        // POPULATE CUSTOMER CLUSTER TABLE (0-10)
+        // =========================================================
+        function populateCustomerClusterTable() {
+            const tbody = document.getElementById('customer-cluster-table-body');
+            tbody.innerHTML = Object.values(CUSTOMER_CLUSTERS).map(c => `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="py-2.5 px-3 font-bold text-indigo-700 whitespace-nowrap">Cluster ${c.id}</td>
+                    <td class="py-2.5 px-3 font-semibold text-slate-900">${c.fullName}</td>
+                    <td class="py-2.5 px-3 text-slate-600">${c.behavior}</td>
+                    <td class="py-2.5 px-3 text-slate-700 font-medium">${c.affinity}</td>
+                </tr>
+            `).join('');
+        }
+
+        // =========================================================
+        // INITIALIZE CHARTS
+        // =========================================================
+        function initCharts() {
+            Chart.defaults.font.family = "'Prompt', 'Inter', sans-serif";
+            Chart.defaults.color = '#64748b';
+
+            // 1. Single vs Repeat Order Chart
+            const repeatCtx = document.getElementById('repeatOrderChart').getContext('2d');
+            new Chart(repeatCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [
+                        'ซื้อซ้ำ (2 ออเดอร์ขึ้นไป) — £8,295,096.17 (93.08%)',
+                        'ซื้อครั้งเดียว (1 ออเดอร์) — £616,311.73 (6.92%)'
+                    ],
+                    datasets: [{
+                        data: [8295096.17, 616311.73],
+                        backgroundColor: ['#10b981', '#f43f5e'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '62%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+
+            // 2. Order Amount Distribution Chart
+            const amtCtx = document.getElementById('orderAmountChart').getContext('2d');
+            new Chart(amtCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['0–50 £', '50–100 £', '100–200 £', '200–500 £', '500–1,000 £', '1,000–5,000 £', '5,000–50,000 £'],
+                    datasets: [{
+                        label: 'สัดส่วนคำสั่งซื้อ (%)',
+                        data: [6, 6, 22, 44, 15, 6, 1],
+                        backgroundColor: ['#94a3b8', '#cbd5e1', '#f59e0b', '#4f46e5', '#6366f1', '#10b981', '#059669'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 50,
+                            ticks: { callback: v => v + '%', font: { size: 11 } }
+                        },
+                        x: {
+                            ticks: { font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+
+            // 3. Model Accuracy Comparison Chart (80% Train / 20% Test)
+            const accCtx = document.getElementById('accuracyComparisonChart').getContext('2d');
+            new Chart(accCtx, {
+                type: 'bar',
+                data: {
+                    labels: [
+                        'K-Nearest Neighbors (KNN)',
+                        'Gradient Boosting',
+                        'Random Forest',
+                        '🏆 Ensemble Combined Model'
+                    ],
+                    datasets: [{
+                        label: 'Test Accuracy (%)',
+                        data: [79.78, 89.47, 89.61, 90.03],
+                        backgroundColor: ['#f59e0b', '#4f46e5', '#10b981', '#7e22ce'],
+                        borderRadius: 8,
+                        barThickness: 44
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ความแม่นยำ: ${ctx.raw}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 70,
+                            max: 95,
+                            ticks: { callback: v => v + '%', font: { size: 11 } }
+                        },
+                        x: {
+                            ticks: { font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // =========================================================
+        // SIMULATOR PRESETS & PREDICTION ENGINE
+        // =========================================================
+        function applyPreset(preset) {
+            const amtEl = document.getElementById('sim-amount');
+            const qtyEl = document.getElementById('sim-qty');
+            const varEl = document.getElementById('sim-variety');
+            const prodEl = document.getElementById('sim-prod-cluster');
+            const regEl = document.getElementById('sim-region');
+
+            if (preset === 'bulk_b2b') {
+                amtEl.value = 3800;
+                qtyEl.value = 520;
+                varEl.value = 18;
+                prodEl.value = '3';
+                regEl.value = 'EU_WHOLESALE';
+            } else if (preset === 'super_vip') {
+                amtEl.value = 1650;
+                qtyEl.value = 180;
+                varEl.value = 32;
+                prodEl.value = '4';
+                regEl.value = 'UK';
+            } else if (preset === 'gift_festive') {
+                amtEl.value = 360;
+                qtyEl.value = 55;
+                varEl.value = 14;
+                prodEl.value = '2';
+                regEl.value = 'AMERICA';
+            } else if (preset === 'first_small') {
+                amtEl.value = 75;
+                qtyEl.value = 8;
+                varEl.value = 3;
+                prodEl.value = '1';
+                regEl.value = 'UK';
+            }
+            updateSimulator();
+        }
+
+        function updateSimulator() {
+            const amount = parseFloat(document.getElementById('sim-amount').value);
+            const qty = parseInt(document.getElementById('sim-qty').value, 10);
+            const variety = parseInt(document.getElementById('sim-variety').value, 10);
+            const prodCluster = parseInt(document.getElementById('sim-prod-cluster').value, 10);
+            const region = document.getElementById('sim-region').value;
+
+            document.getElementById('sim-amount-val').textContent = `£${amount.toLocaleString()}`;
+            document.getElementById('sim-qty-val').textContent = `${qty.toLocaleString()} ชิ้น`;
+            document.getElementById('sim-variety-val').textContent = `${variety} รายการ`;
+
+            const regionBoost = region === 'EU_WHOLESALE' ? 1.15 : (region === 'ASIA' ? 1.08 : 1.0);
+            const effectiveAmount = amount * regionBoost;
+
+            // Determine base customer cluster from first purchase inputs + dominant Product Cluster
+            let baseClusterId = 5;
+            if (effectiveAmount >= 2500 && qty >= 250) {
+                baseClusterId = 10; // กลุ่มลูกค้าส่ง / ธุรกิจขนาดใหญ่
+            } else if (effectiveAmount >= 1200 && variety >= 20) {
+                baseClusterId = 9;  // กลุ่มซูปเปอร์วีไอพี / ขาประจำสายเปย์
+            } else if (effectiveAmount >= 950 && qty >= 120) {
+                baseClusterId = 7;  // กลุ่มนักช้อปกระเป๋าหนัก
+            } else if (effectiveAmount >= 650 && variety >= 15) {
+                baseClusterId = 8;  // กลุ่มลูกค้าประจำยอดสะสมสูง
+            } else if (effectiveAmount >= 250 && qty >= 45 && variety >= 10) {
+                baseClusterId = 6;  // กลุ่มลูกค้ารายย่อยขาประจำ
+            } else if (prodCluster === 2 && effectiveAmount >= 120) {
+                baseClusterId = 2;  // กลุ่มนักช้อปตามเทศกาลและของขวัญ
+            } else if (prodCluster === 3 && effectiveAmount >= 120) {
+                baseClusterId = 3;  // กลุ่มคนรักกระเป๋าและอุปกรณ์จัดเก็บ
+            } else if (prodCluster === 4 && effectiveAmount >= 120) {
+                baseClusterId = 4;  // กลุ่มสาวกเครื่องประดับและของหรูหรา
+            } else if (prodCluster === 0 && effectiveAmount >= 120) {
+                baseClusterId = 0;  // กลุ่มนักช้อปสายของแต่งบ้านทั่วไป
+            } else if (prodCluster === 1 && effectiveAmount < 250) {
+                baseClusterId = 1;  // กลุ่มสายแฟชั่นและเครื่องประดับย่อย
+            } else {
+                baseClusterId = 5;  // กลุ่มลูกค้าขาจร / ซื้อของทั่วไปคละหมวด
+            }
+
+            // Individual model predictions (KNN may occasionally reflect local neighborhood boundary)
+            const rfClusterId = baseClusterId;
+            const gbClusterId = baseClusterId;
+            let knnClusterId = baseClusterId;
+            if (amount >= 100 && amount <= 200 && variety < 8) {
+                knnClusterId = 5;
+            } else if (prodCluster === 1 && amount >= 100 && amount < 220) {
+                knnClusterId = 1;
+            }
+
+            // Weighted Ensemble selection (weights aligned with model accuracies)
+            const weights = {
+                rf: 0.8961,
+                gb: 0.8947,
+                knn: 0.7978
+            };
+            const scoreMap = {};
+            [
+                { id: rfClusterId, w: weights.rf },
+                { id: gbClusterId, w: weights.gb },
+                { id: knnClusterId, w: weights.knn }
+            ].forEach(item => {
+                scoreMap[item.id] = (scoreMap[item.id] || 0) + item.w;
+            });
+
+            let ensembleClusterId = baseClusterId;
+            let bestWeight = -1;
+            Object.entries(scoreMap).forEach(([cid, w]) => {
+                if (w > bestWeight) {
+                    bestWeight = w;
+                    ensembleClusterId = parseInt(cid, 10);
+                }
+            });
+
+            const rfCluster = CUSTOMER_CLUSTERS[rfClusterId];
+            const gbCluster = CUSTOMER_CLUSTERS[gbClusterId];
+            const knnCluster = CUSTOMER_CLUSTERS[knnClusterId];
+            const finalCluster = CUSTOMER_CLUSTERS[ensembleClusterId];
+            const prodInfo = PRODUCT_CLUSTERS[prodCluster];
+
+            document.getElementById('pred-rf-name').textContent = rfCluster.fullName;
+            document.getElementById('pred-rf-conf').textContent = `ความมั่นใจโมเดล: ~89.61%`;
+
+            document.getElementById('pred-gb-name').textContent = gbCluster.fullName;
+            document.getElementById('pred-gb-conf').textContent = `ความมั่นใจโมเดล: ~89.47%`;
+
+            document.getElementById('pred-knn-name').textContent = knnCluster.fullName;
+            document.getElementById('pred-knn-conf').textContent = `ความมั่นใจโมเดล: ~79.78%`;
+
+            const agreeCount = [rfClusterId, gbClusterId, knnClusterId].filter(x => x === ensembleClusterId).length;
+            document.getElementById('sim-vote-badge').textContent =
+                agreeCount === 3 ? 'มติเอกฉันท์ 3/3 โมเดล • Ensemble 90.03%' : `เสียงข้างมาก ${agreeCount}/3 โมเดล • Ensemble 90.03%`;
+
+            document.getElementById('sim-final-cluster').textContent = finalCluster.fullName;
+            document.getElementById('sim-final-desc').textContent = finalCluster.desc;
+            document.getElementById('sim-prod-link').textContent =
+                `เลือก ${prodInfo.label} • ${finalCluster.affinity}`;
+
+            const extraTips = [];
+            if (amount < 100) {
+                extraTips.push('บิลแรกต่ำกว่า £100: แนะนำจัดเซต Bundle หรือสินค้าเสริมเพื่อเพิ่มจำนวนชิ้นต่อบิล และส่งคูปองกระตุ้นการซื้อครั้งที่ 2');
+            } else if (amount <= 200) {
+                extraTips.push('บิลแรกอยู่ในช่วง £100–£200: ทำโปรโมชันกระตุ้นยอดสั่งซื้อครั้งถัดไปให้ผ่านเกณฑ์ £200');
+            } else {
+                extraTips.push('บิลแรกเกิน £200: ดูแลติดตามการซื้อซ้ำอย่างต่อเนื่องเนื่องจากลูกค้าซื้อซ้ำสร้างยอดขายถึง 93.08% ของทั้งหมด');
+            }
+
+            const allActions = [...finalCluster.actions, ...extraTips];
+            document.getElementById('sim-actions').innerHTML = allActions.map(act => `<li>${act}</li>`).join('');
+        }
+
+        // Boot application
+        window.addEventListener('DOMContentLoaded', () => {
+            populateCustomerClusterTable();
+            initCharts();
+            updateSimulator();
+        });
+    </script>
+</body>
+</html>
